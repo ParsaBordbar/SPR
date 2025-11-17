@@ -2,7 +2,7 @@ from pprint import pprint
 import numpy as np
 import matplotlib.pyplot as plt
 
-from test_eigen_vals_vects import cov_test
+from test_eigen_vals_vects import cov_test, mean_test, test_eigenvalues, test_eigenvectors
 
 # I've Created a simple Test for this exersice, you can use ;)
 def main():
@@ -108,6 +108,18 @@ def main():
 
     eigenvectors1 = calculate_eigenvectors(cov_matrix1, eigenvalues1)
     eigenvectors2 = calculate_eigenvectors(cov_matrix2, eigenvalues2)
+
+    def tests():
+        mean_test(calculated_mean1, samples1)
+        mean_test(calculated_mean2, samples2)
+        cov_test(cov_matrix1, samples1)
+        cov_test(cov_matrix2, samples2)
+        test_eigenvalues(cov1, calculate_eigenvalues)
+        test_eigenvalues(cov2, calculate_eigenvalues)
+        test_eigenvectors(cov_matrix1, eigenvalues1, eigenvectors1)
+        test_eigenvectors(cov_matrix2, eigenvalues2, eigenvectors2)
+    tests()
+
 
     print("Class 1 Mean:\n", calculated_mean1)
     print("Class 1 Covariance Matrix:\n", cov_matrix1)
