@@ -1,10 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+from configs import STUDENT_ID
+
 
 def main():
     # Get student number for seeding randomness
-    student_number = int(input("Enter your student number: "))
+    #student_number = int(input("Enter your student number: ")
+    student_number = STUDENT_ID
     np.random.seed(student_number)
 
     # Generate samples for 2 classes (same as before)
@@ -19,10 +22,23 @@ def main():
 
     # Calculate means and covs using functions from Part 1 (assume implemented)
     def calculate_mean(data):
-        return None  # Copy from Part 1
+        n = len(data)
+        sum = np.zeros(data.shape[1])
+        for i in range(n):
+            sum += data[i]
+        return sum/n
 
     def calculate_covariance(data, mean):
-        return None  # Copy from Part 1
+        """
+        Calulate The X_center (data - mean) then use it with:
+        cov = (1/n) Σ (Xi - meanX)(Yi - meanY)
+        """
+        n = len(data)
+        x_center = np.subtract(data, mean)
+        x_transpose = np.transpose(x_center)
+        cov = 1/n * np.dot(x_transpose, x_center)
+        print(f"cov shape: {cov.size}")
+        return cov
 
     calculated_mean1 = calculate_mean(samples1)
     calculated_mean2 = calculate_mean(samples2)
@@ -31,13 +47,36 @@ def main():
 
     # Copy helper functions from Part 2
     def matrix_det(cov):
-        return None  # Copy from Part 2
+        """
+        A = | a   b |
+            | c   d |
+        |det(A)| = ad - bc
+        """
+        a, b = cov[0 ,0], cov[0, 1]
+        c, d = cov[1, 0], cov[1, 1]
+        det = (a * d) - (c * b)
+        return det
 
     def matrix_inv(cov):
-        return None  # Copy from Part 2
+        """
+        1/det * [[d, -b], [-c, a]]
+        """
+        a, b = cov[0, 0], cov[0, 1]
+        c, d = cov[1, 0], cov[1, 1]
+        det = matrix_det(cov)
+        return (1/det) * np.array([[d, -b],
+                                [-c, a]])
 
     def multivariate_gaussian_logpdf(x, mean, cov):
-        return None  # Copy from Part 2
+        det = matrix_det(cov)
+        inv = matrix_inv(cov)
+        
+        x_center = x - mean
+        # Quadratic form: (x-mean)^T Σ^{-1} (x-mean)
+        quad = np.dot(x_center.T, np.dot(inv, x_center))
+
+        log_pdf = -0.5 * (quad + np.log(det) + 2 * np.log(2*np.pi))
+        return log_pdf
 
     # Test points (generate some for classification)
     test_points = np.random.uniform(0, 7, size=(20, 2))
@@ -45,21 +84,40 @@ def main():
     # ## TODO ##: Implement Maximum Likelihood (ML) classifier
     # Expected: Function that takes x (2D) and returns class (0 or 1)
     def ml_classifier(x):
-        # Replace with your code
-        return 0  # Dummy
+        logp1 = multivariate_gaussian_logpdf(x, calculated_mean1, cov_matrix1)
+        logp2 = multivariate_gaussian_logpdf(x, calculated_mean2, cov_matrix2)
+        return 0 if logp1 > logp2 else 1
 
     # ## TODO ##: Implement Maximum A Posteriori (MAP) classifier
     prior1 = 0.7
     prior2 = 0.3
     def map_classifier(x):
-        # Replace with your code
-        return 0  # Dummy
+        logp1 = multivariate_gaussian_logpdf(x, calculated_mean1, cov_matrix1) + np.log(prior1)
+        logp2 = multivariate_gaussian_logpdf(x, calculated_mean2, cov_matrix2) + np.log(prior2)
+        return 0 if logp1 > logp2 else 1
 
     # ## TODO ##: Implement Risk-based MAP (Minimum Risk) classifier
     loss = np.array([[0, 1], [10, 0]])
     def risk_map_classifier(x):
-        # Replace with your code
-        return 0  # Dummy
+        # Posterior probabilities (unnormalized)
+        logp1 = multivariate_gaussian_logpdf(x, calculated_mean1, cov_matrix1) + np.log(prior1)
+        logp2 = multivariate_gaussian_logpdf(x, calculated_mean2, cov_matrix2) + np.log(prior2)
+
+        # Convert log probs to real probabilities safely
+        max_log = max(logp1, logp2)
+        p1 = np.exp(logp1 - max_log)
+        p2 = np.exp(logp2 - max_log)
+        Z = p1 + p2
+        p1 /= Z
+        p2 /= Z
+
+        # Expected risks:
+        # R(decide=0) = L00*p1 + L01*p2
+        # R(decide=1) = L10*p1 + L11*p2
+        R0 = loss[0, 0] * p1 + loss[0, 1] * p2
+        R1 = loss[1, 0] * p1 + loss[1, 1] * p2
+
+        return 0 if R0 < R1 else 1
 
     # Classify test points
     ml_preds = [ml_classifier(pt) for pt in test_points]

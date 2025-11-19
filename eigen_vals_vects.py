@@ -1,14 +1,13 @@
-from pprint import pprint
 import numpy as np
 import matplotlib.pyplot as plt
-
-from test_eigen_vals_vects import cov_test, mean_test, test_eigenvalues, test_eigenvectors
+from configs import STUDENT_ID # This is set globaly from the config file
+from tests.test_eigen_vals_vects import cov_test, mean_test, test_eigenvalues, test_eigenvectors
 
 # I've Created a simple Test for this exersice, you can use ;)
 def main():
     # Get student number for seeding randomness
     #student_number = int(input("Enter your student number: "))
-    student_number = 40435340
+    student_number = STUDENT_ID
     np.random.seed(student_number)
 
     # Generate samples for 2 classes (you can extend to 3 if desired)
@@ -53,8 +52,6 @@ def main():
 
     cov_matrix1 = calculate_covariance(samples1, calculated_mean1)
     cov_matrix2 = calculate_covariance(samples2, calculated_mean2)
-    cov_test(cov_matrix1, samples1)
-
 
     # ## TODO ##: Calculate eigenvalues for each covariance matrix from scratch
     # Expected output: 1D array of 2 values, sorted descending
@@ -109,7 +106,41 @@ def main():
     eigenvectors1 = calculate_eigenvectors(cov_matrix1, eigenvalues1)
     eigenvectors2 = calculate_eigenvectors(cov_matrix2, eigenvalues2)
 
+    def explained_variance_ratio(eigenvalues):
+        """
+        Explained Variance Ratio (EVR)
+        """
+        total = np.sum(eigenvalues)
+        return eigenvalues / total
+
+    def reconstruct_data(data, mean, eigenvectors, k):
+        """
+        reconstruct data with projectiion of k eigenvectors
+        """
+        V = eigenvectors[:, :k] # keep first k eigenvectors
+        Xc = data - mean
+        X_proj = np.dot(Xc, V) # projection
+        X_recon = np.dot(X_proj, V.T) + mean
+        return X_recon
+    
+    def reconstruct_tests():
+        """
+        Runs the reconstruct function with diffrent k values
+        """
+        print("Reconstruct Tests: \n")
+        k11 = reconstruct_data(samples1, mean1, eigenvectors1, 1)
+        print(f"k=1", k11)
+        k12 = reconstruct_data(samples1, mean1, eigenvectors1, 2)
+        print(f"k=2", k12)
+        k21 = reconstruct_data(samples1, mean1, eigenvectors1, 1)
+        print(f"k=1", k21)
+        k22 = reconstruct_data(samples1, mean1, eigenvectors1, 2)
+        print(f"k=2", k22)
+
     def tests():
+        """
+        Tests Not method implementation's outputs with the method ones
+        """
         mean_test(calculated_mean1, samples1)
         mean_test(calculated_mean2, samples2)
         cov_test(cov_matrix1, samples1)
@@ -118,6 +149,7 @@ def main():
         test_eigenvalues(cov2, calculate_eigenvalues)
         test_eigenvectors(cov_matrix1, eigenvalues1, eigenvectors1)
         test_eigenvectors(cov_matrix2, eigenvalues2, eigenvectors2)
+        reconstruct_tests()
     tests()
 
 
@@ -130,6 +162,7 @@ def main():
     print("Class 2 Covariance Matrix:\n", cov_matrix2)
     print("Class 2 Eigenvalues:\n", eigenvalues2)
     print("Class 2 Eigenvectors:\n", eigenvectors2)
+    print("explained_variance_ratio", explained_variance_ratio(eigenvalues=[eigenvalues1, eigenvalues2]))
 
     # Visualization (provided): Scatter plot with eigenvectors for each class
     if all(v is not None for v in [calculated_mean1, cov_matrix1, eigenvalues1, eigenvectors1, calculated_mean2, cov_matrix2, eigenvalues2, eigenvectors2]):
