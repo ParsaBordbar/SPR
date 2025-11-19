@@ -1,3 +1,5 @@
+# SPR
+
 This repo contains implementations from Statistical Pattern Recognition Operations and Theories using numpy and matplotlib.
 
 ## Theories That This Repo Covers (For Now):
