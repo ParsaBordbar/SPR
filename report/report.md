@@ -1,200 +1,230 @@
-Eigenvalues, Bayesian Decision Rules, and Decision Boundaries
+# Statistical Pattern Recognition: Homework 2 Report
+**Student:** Parsa Bordbar  
+**ID:** 40435340  
+**Date:** 2025
 
-Student: Parsa Bordbar — ID: 40435340
 
-⸻
+This homework implements foundational concepts in pattern recognition using Bayesian decision theory. We computed eigenvalues/eigenvectors from scratch, implemented multivariate Gaussian classifiers, and compared three decision rules: Maximum Likelihood (ML), Maximum A Posteriori (MAP), and Risk-based classification. All mathematical operations were implemented manually using only basic NumPy operations to reinforce theoretical understanding.
 
-## 1. Eigenvalues & Eigenvectors for Gaussian Classes
 
-### 1.1 Mean Vector Calculation
+## Part 1: Eigenvalues & Eigenvectors Analysis
 
-For a dataset X = \{x_1, x_2, \dots, x_n\}, the mean is:
+### 1.1 Mean Vector and Covariance Matrix
 
-\mu = \frac{1}{n}\sum_{i=1}^n x_i
+**Implementation:**
+- Sample mean computed as: μ = (1/n)Σxᵢ
+- Covariance computed as: Σ = (1/n)(X - μ)ᵀ(X - μ)
+- Both calculated using only loops and basic linear algebra
 
-We computed the sample means of both classes using only sums and loops.
+**Results for Class 1 (mean [2,2], cov [[1, 0.5], [0.5, 1]]):**
+- Calculated Mean: Close to [2, 2]
+- Calculated Covariance: Matches expected structure with positive correlation
 
-⸻
+**Results for Class 2 (mean [5,5], cov [[1, -0.5], [-0.5, 1]]):**
+- Calculated Mean: Close to [5, 5]
+- Calculated Covariance: Negative correlation between features (inverse relationship)
 
-### 1.2 Covariance Matrix
+**Verification:** Both computed values pass numerical tests against NumPy's built-in functions.
 
-The sample covariance (using \frac{1}{n}, ML estimator) is:
+### 1.2 Eigenvalues Calculation
 
-\Sigma = \frac{1}{n} (X - \mu)^\top (X - \mu)
+**Formula Used (2×2 case):**
+- λ = [(a+d) ± √((a+d)² - 4(ad-bc))] / 2
+- Where matrix = [[a, b], [c, d]]
 
-This measures how the two features vary together.
+**Process:**
+1. Compute trace (a + d) and determinant (ad - bc)
+2. Calculate discriminant and both eigenvalues
+3. Sort in descending order
 
-⸻
+**Interpretation:**
+- **Larger eigenvalue:** Direction of maximum variance in the data
+- **Smaller eigenvalue:** Direction of lesser spread (noise/compression axis)
+- For Class 1: Eigenvalues likely ≈ [1.5, 0.5], indicating data stretched more along first principal direction
+- For Class 2: Similar magnitude but with opposite correlation structure
 
-### 1.3 Eigenvalues and Eigenvectors (Manually Solved)
+### 1.3 Eigenvectors Calculation
 
-For a 2×2 covariance matrix:
+**Method:**
+- For each eigenvalue λ, solve (Σ - λI)v = 0
+- Used: v = [1, -(a-λ)/b]ᵀ with fallback for numerical stability
+- Normalized each vector to unit length: v' = v/‖v‖
 
-\Sigma =
-\begin{bmatrix}
-a & b \\ c & d
-\end{bmatrix}
-
-Eigenvalues satisfy:
-
-\lambda = \frac{(a+d) \pm \sqrt{(a+d)^2 - 4(ad - bc)}}{2}
-
-Eigenvectors satisfy:
-
-(\Sigma - \lambda I)v = 0
-
-We solved this manually:
-
-v = \begin{bmatrix} 1 \\ -\frac{a - \lambda}{b} \end{bmatrix}
-\quad\text{then normalized: } \frac{v}{\|v\|}
-
-We verified:
-	•	eigenvectors are orthogonal
-	•	eigenvalues match numpy.linalg.eigvals
-
-⸻
+**Verification:**
+- Orthogonality test: vᵢ · vⱼ = 0 for i ≠ j ✓
+- Eigenvalue equation test: Σv = λv ✓
+- Eigenvectors form orthonormal basis
 
 ### 1.4 Explained Variance Ratio
 
-A principal component with eigenvalue \lambda_i explains:
+**Formula:**
+EVR_i = λᵢ / Σλⱼ
 
-\text{Explained Variance}_{i} = \frac{\lambda_i}{\lambda_1 + \lambda_2}
-
-Interpretation:
-	•	Large eigenvalue → direction of greatest variance
-	•	Smaller eigenvalue → compressed/noisy direction
-
-⸻
+**Interpretation:**
+- If λ₁ ≈ 0.75 and λ₂ ≈ 0.25 (normalized to 1.0):
+  - First component explains 75% of total variance
+  - Two components together explain 100% (complete reconstruction)
+- **Key insight:** One component often captures most variance; second component helps refine boundaries
 
 ### 1.5 PCA Reconstruction Discussion
 
-Using 1 principal component:
-	•	We project data onto eigenvector of largest eigenvalue
-	•	Reconstruction loses information in the direction of the smaller eigenvalue
-	•	Data becomes a line representation
+**With k=1 principal component:**
+- Project data onto eigenvector with largest eigenvalue
+- Reconstruction as: X̂ = VV̂ᵀ(X - μ) + μ
+- Result: Data collapses to a line through the class mean
+- Loss: Information in perpendicular direction is discarded
 
-Using 2 principal components:
-	•	Full reconstruction (no loss)
-	•	All variance retained
+**With k=2 principal components:**
+- Full reconstruction with zero loss
+- All original variance preserved
 
-Interpretation:
-Eigenvalues directly relate to the “spread” of data in each direction.
-A larger eigenvalue means the class distribution is stretched more along that axis.
+**Relationship to Classification:**
+- High variance direction (large λ) = class-discriminative axis
+- Low variance direction (small λ) = noise or background variation
+- Eigenvalues directly encode how "spread out" each class is
 
-⸻
 
-## 2. Bayesian Decision Theory
+## Part 2: Bayesian Decision Rules
 
-### 2.1 Multivariate Gaussian Log-PDF
+### 2.1 Multivariate Gaussian Log-Probability Density
 
-For 2D Gaussian:
+**Formula (2D Gaussian):**
+```
+ln p(x|ωᵢ) = -½[(x-μ)ᵀΣ⁻¹(x-μ) + ln|Σ| + 2ln(2π)]
+```
 
-p(x|\omega_i) = \frac{1}{\sqrt{(2\pi)^2 |\Sigma|}}
-\exp\left(
--\frac{1}{2} (x-\mu)^T \Sigma^{-1} (x-\mu)
-\right)
+**Implementation Details:**
+- 2×2 determinant: det = ad - bc
+- 2×2 inverse: Σ⁻¹ = (1/det)[[d, -b], [-c, a]]
+- Quadratic form: (x-μ)ᵀΣ⁻¹(x-μ) computed via two matrix multiplications
+- Used log-space for numerical stability
 
-In log form (used for numerical stability):
+**Verification:** Results match NumPy multivariate_normal.logpdf()
 
-\ln p(x|\omega_i)
-=
--\frac{1}{2}\big[
-(x-\mu)^T \Sigma^{-1} (x-\mu)
-+ \ln |\Sigma|
-+ 2\ln(2\pi)
-\big]
+### 2.2 Maximum Likelihood (ML) Classifier
 
-We implemented:
-	•	determinant
-	•	inverse
-	•	quadratic form
-	•	log density
-all manually without NumPy special functions.
+**Decision Rule:**
+```
+ĉ = argmax_i ln p(x|ωᵢ)
+```
 
-⸻
+**Characteristics:**
+- Ignores prior probabilities (implicitly assumes equal priors)
+- Decision boundary is symmetric between classes
+- Optimal when class priors are truly equal or unknown
 
-## 3. Classification Rules
+**Expected Behavior:**
+- Boundary passes roughly midway between class means
+- Quadratic shape reflects Gaussian structure
+- Equal-cost misclassification assumed
 
-⸻
+### 2.3 Maximum A Posteriori (MAP) Classifier
 
-### 3.1 Maximum Likelihood (ML) Classifier
+**Decision Rule:**
+```
+ĉ = argmax_i [ln p(x|ωᵢ) + ln P(ωᵢ)]
+```
 
-ML classifier ignores priors:
+**Tested with priors:**
+- P(ω₁) = 0.7, P(ω₂) = 0.3 (example shown in code)
 
-\text{decide } \omega_1 \text{ if } \ln p(x|\omega_1) > \ln p(x|\omega_2)
+**Effects:**
+- Boundary **shifts toward minority class** (ω₂)
+- Majority class (ω₁) gets larger decision region
+- More realistic when class imbalance is known
 
-This means:
-	•	Choose the class whose Gaussian is more likely
-	•	Good when priors are equal or unknown
+**Trade-off:**
+- Reduces misclassification rate on frequent class
+- Increases error rate on rare class
 
-Decision boundary:
-Where likelihoods are equal
-→ quadratic curve between the two Gaussians
+### 2.4 Risk-Based MAP Classifier (Minimum Expected Risk)
 
-⸻
+**Loss Matrix (from code):**
+```
+L = [[0,  1],
+     [10, 0]]
+```
+- L₀₀ = L₁₁ = 0 (correct decisions costless)
+- L₀₁ = 1 (misclassifying ω₂ as ω₁ costs 1)
+- L₁₀ = 10 (misclassifying ω₁ as ω₂ costs 10x more!)
 
-### 3.2 Maximum A Posteriori (MAP) Classifier
+**Decision Rule:**
+```
+ĉ = argmin_i Σⱼ L(i,j) P(ωⱼ|x)
+```
 
-MAP includes priors:
+**Expected Risk Calculation:**
+- R(decide ω₁) = 0·P(ω₁|x) + 1·P(ω₂|x) = P(ω₂|x)
+- R(decide ω₂) = 10·P(ω₁|x) + 0·P(ω₂|x) = 10·P(ω₁|x)
 
-\text{decide } \omega_1 \text{ if }
-\ln p(x|\omega_1) + \ln P(\omega_1)
->
-\ln p(x|\omega_2) + \ln P(\omega_2)
+**Effects:**
+- Boundary **shifts dramatically toward class 1**
+- High cost of misclassifying ω₁ forces conservative classification
+- Classifier predicts ω₂ only when very confident
+- Useful for asymmetric cost problems (e.g., medical diagnosis, fraud detection)
 
-Effects of priors:
-	•	If P(\omega_1) > P(\omega_2), decision boundary shifts toward class 2
-	•	The more likely class gets more territory
 
-⸻
+## Part 3: Comparison of Classifiers
 
-### 3.3 Risk-Based MAP (Minimum Expected Risk)
+### 3.1 Decision Boundary Differences
 
-Risk matrix:
+| Aspect | ML | MAP (0.7/0.3) | Risk-based |
+|--------|----|----|-----------|
+| **Symmetry** | Yes | Shifted to ω₂ | Heavily shifted to ω₂ |
+| **Prior Dependence** | No | Yes (0.7/0.3) | Yes + Loss matrix |
+| **Use Case** | Unknown priors | Known class balance | Cost-sensitive tasks |
+| **Boundary Location** | Midpoint | Offset | Far offset |
 
-\lambda =
-\begin{bmatrix}
-0 & 1 \\
-10 & 0
-\end{bmatrix}
+### 3.2 Misclassification Trade-offs
 
-Risk of choosing class 0:
+**ML Classifier:**
+- Minimizes total error rate when priors are equal
+- Symmetric errors on both classes
 
-R(0) = \lambda_{00}P(\omega_1|x) + \lambda_{01}P(\omega_2|x)
+**MAP Classifier:**
+- Better accuracy on majority class (ω₁)
+- Worse accuracy on minority class (ω₂)
+- Overall error may be lower if majority class dominates
 
-Risk of choosing class 1:
+**Risk-based Classifier:**
+- Minimizes expected cost (not error rate)
+- Heavily penalizes ω₁ errors
+- Overall accuracy may be lower, but cost is minimized
 
-R(1) = \lambda_{10}P(\omega_1|x) + \lambda_{11}P(\omega_2|x)
 
-Decision rule:
+## Part 4: Visualization & Interpretation
 
-\text{choose the class with smaller expected risk}
+**Generated Plots:**
+1. **Scatter + Eigenvectors:** Shows class samples with eigenvectors drawn from means, scaled by √λ
+   - Visualizes principal directions and relative variance
+   - Cyan arrows = Class 1 principal directions
+   - Magenta arrows = Class 2 principal directions
 
-Effects:
-	•	If misclassifying class 1 is expensive → classifier becomes conservative → more class-1 predictions.
+2. **Decision Boundaries:** Three subplots (or separate figures) showing:
+   - ML boundary (symmetric)
+   - MAP boundary (asymmetric due to priors)
+   - Risk-based boundary (maximally asymmetric due to cost)
 
-⸻
 
-## 4. Decision Boundary Visualizations
+## Summary of Key Findings
 
-We plotted:
-	•	ML boundary
-	•	MAP boundary
-	•	Risk-based MAP boundary
+1. **Eigenvalues encode spread:** Large λ = stretched direction; small λ = compressed direction
+2. **PCA reconstruction:** One component often captures 70-80% of variance; two components = perfect reconstruction
+3. **Decision boundaries respond to priors:** Equal priors → symmetric boundaries; unequal priors → shifted boundaries
+4. **Risk asymmetry drives conservative classification:** High penalty for ω₁ errors → classifier becomes reluctant to predict ω₂
+5. **Bayesian framework unifies classification:** ML, MAP, and risk-based are special cases of the same principle
 
-Observations:
 
-ML
+## Appendix: Mathematical Formulas
 
-Symmetric boundary based only on Gaussian shapes.
+**Eigenvalue equation (2×2):**
+λ² - (trace)λ + det = 0
 
-MAP
+**Explained variance ratio:**
+EVR = λ / Σλ
 
-Boundary moves depending on prior ratios:
-	•	Increasing P(\omega_1) shifts boundary toward class 2
+**Posterior probability (Bayes' theorem):**
+P(ωᵢ|x) = p(x|ωᵢ)P(ωᵢ) / p(x)
 
-Risk-based MAP
-
-Boundary shifts MUCH more aggressively:
-	•	Because misclassifying class 1 costs 10× more
-	•	Classifier behaves cautiously → avoids high-risk mistakes
+**Expected risk:**
+R(αᵢ) = Σⱼ L(αᵢ, ωⱼ) P(ωⱼ|x)
