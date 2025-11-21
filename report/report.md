@@ -59,6 +59,7 @@ This homework implements foundational concepts in pattern recognition using Baye
 
 **Formula:**
 EVR_i = λᵢ / Σλⱼ
+<img width="800" height="600" alt="Figure_Eigenvectors" src="https://github.com/user-attachments/assets/b3a502c8-f671-40e2-8eaa-cc8fc1e1c3c2" />
 
 **Interpretation:**
 - If λ₁ ≈ 0.75 and λ₂ ≈ 0.25 (normalized to 1.0):
@@ -176,6 +177,7 @@ L = [[0,  1],
 | **Boundary Location** | Midpoint | Offset | Far offset |
 
 ### 3.2 Misclassification Trade-offs
+<img width="800" height="600" alt="Figure_ml_mlp_risk" src="https://github.com/user-attachments/assets/41f4a62d-5c5a-42c1-a7f7-eb79afa221f1" />
 
 **ML Classifier:**
 - Minimizes total error rate when priors are equal
