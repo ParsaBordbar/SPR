@@ -59,6 +59,7 @@ This homework implements foundational concepts in pattern recognition using Baye
 
 **Formula:**
 EVR_i = λᵢ / Σλⱼ
+
 <img width="800" height="600" alt="Figure_Eigenvectors" src="https://github.com/user-attachments/assets/b3a502c8-f671-40e2-8eaa-cc8fc1e1c3c2" />
 
 **Interpretation:**
