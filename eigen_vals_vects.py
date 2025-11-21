@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 from configs import STUDENT_ID # This is set globaly from the config file
 from tests.test_eigen_vals_vects import cov_test, mean_test, test_eigenvalues, test_eigenvectors
@@ -80,7 +81,7 @@ def main():
     # Expected output: 2x2 array, columns are eigenvectors corresponding to eigenvalues
     def calculate_eigenvectors(cov, eigenvalues):
         """
-        we should sove this: (a - λ)v1 + b·v2 = 0
+        we should solve this: (a - λ)v1 + b·v2 = 0
         then we can normalize!
         """
         a, b = cov[0 ,0], cov[0, 1]
@@ -113,6 +114,10 @@ def main():
         total = np.sum(eigenvalues)
         return eigenvalues / total
 
+    evr1 = explained_variance_ratio(eigenvalues1)
+    evr2 = explained_variance_ratio(eigenvalues2)
+
+
     def reconstruct_data(data, mean, eigenvectors, k):
         """
         reconstruct data with projectiion of k eigenvectors
@@ -123,19 +128,42 @@ def main():
         X_recon = np.dot(X_proj, V.T) + mean
         return X_recon
     
-    def reconstruct_tests():
-        """
-        Runs the reconstruct function with diffrent k values
-        """
-        print("Reconstruct Tests: \n")
-        k11 = reconstruct_data(samples1, mean1, eigenvectors1, 1)
-        print(f"k=1", k11)
-        k12 = reconstruct_data(samples1, mean1, eigenvectors1, 2)
-        print(f"k=2", k12)
-        k21 = reconstruct_data(samples1, mean1, eigenvectors1, 1)
-        print(f"k=1", k21)
-        k22 = reconstruct_data(samples1, mean1, eigenvectors1, 2)
-        print(f"k=2", k22)
+    def reconstruction_error(original, reconstructed):
+        """Calculate MSE and RMSE of reconstruction"""
+        mse = np.mean((original - reconstructed) ** 2)
+        rmse = np.sqrt(mse)
+        return mse, rmse
+
+    
+    def verify_orthogonality(eigenvectors, class_name):
+        """Verify that eigenvectors are orthogonal"""
+        v1 = eigenvectors[:, 0]
+        v2 = eigenvectors[:, 1]
+        dot_product = np.dot(v1, v2)
+        print(f"{class_name} - Orthogonality Check:")
+        print(f"  v1 · v2 = {dot_product:.10f} (should be ≈ 0)")
+        return True if abs(dot_product) < 1e-10 else False
+
+    verify_orthogonality(eigenvectors1, "Class 1")
+    verify_orthogonality(eigenvectors2, "Class 2")
+
+    def print_eigenvalue_table(eigenvalues, evr, class_name):
+        """Print a formatted table of eigenvalues and EVR (NO PANDAS NEEDED!)"""
+        print(f"\n{'='*60}")
+        print(f"{class_name} - Eigenvalues and Explained Variance Ratio")
+        print(f"{'='*60}")
+        print(f"{'Component':<15} {'Eigenvalue':<20} {'EVR':<15} {'Cumulative EVR':<15}")
+        print(f"{'-'*60}")
+        
+        cumulative = 0
+        for i in range(len(eigenvalues)):
+            cumulative += evr[i]
+            print(f"PC {i+1:<11} {eigenvalues[i]:<20.6f} {evr[i]:<15.2%} {cumulative:<15.2%}")
+        
+        print(f"{'='*60}\n")
+
+    print_eigenvalue_table(eigenvalues1, evr1, "Class 1")
+    print_eigenvalue_table(eigenvalues2, evr2, "Class 2")
 
     def tests():
         """
@@ -149,9 +177,81 @@ def main():
         test_eigenvalues(cov2, calculate_eigenvalues)
         test_eigenvectors(cov_matrix1, eigenvalues1, eigenvectors1)
         test_eigenvectors(cov_matrix2, eigenvalues2, eigenvectors2)
-        reconstruct_tests()
     tests()
 
+    print("Reconstruct Tests: \n")
+    recon1_k1 = reconstruct_data(samples1, calculated_mean1, eigenvectors1, 1)
+    recon1_k2 = reconstruct_data(samples1, calculated_mean1, eigenvectors1, 2)
+    
+    recon2_k1 = reconstruct_data(samples2, calculated_mean2, eigenvectors2, 1)
+    recon2_k2 = reconstruct_data(samples2, calculated_mean2, eigenvectors2, 2)
+
+    mse1_k1, rmse1_k1 = reconstruction_error(samples1, recon1_k1)
+    mse1_k2, rmse1_k2 = reconstruction_error(samples1, recon1_k2)
+    mse2_k1, rmse2_k1 = reconstruction_error(samples2, recon2_k1)
+    mse2_k2, rmse2_k2 = reconstruction_error(samples2, recon2_k2)
+    
+    print(f"{'='*60}")
+    print("Reconstruction Error Analysis")
+    print(f"{'='*60}")
+    print(f"Class 1 with k=1: MSE={mse1_k1:.6f}, RMSE={rmse1_k1:.6f}")
+    print(f"Class 1 with k=2: MSE={mse1_k2:.6f}, RMSE={rmse1_k2:.6f}")
+    print(f"Class 2 with k=1: MSE={mse2_k1:.6f}, RMSE={rmse2_k1:.6f}")
+    print(f"Class 2 with k=2: MSE={mse2_k2:.6f}, RMSE={rmse2_k2:.6f}")
+    print(f"{'='*60}\n")
+
+    # This part is part of the Exploration I created some plots with matplotlib for reconstructed data
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    fig.suptitle('PCA Reconstruction: Original vs k=1 vs k=2', fontsize=16)
+
+    # Class 1
+    axes[0, 0].scatter(samples1[:, 0], samples1[:, 1], alpha=0.6, label='Original')
+    axes[0, 0].set_title('Class 1 - Original Data')
+    axes[0, 0].set_xlabel('Feature 1')
+    axes[0, 0].set_ylabel('Feature 2')
+    axes[0, 0].grid(True)
+    axes[0, 0].legend()
+
+    axes[0, 1].scatter(recon1_k1[:, 0], recon1_k1[:, 1], alpha=0.6, color='orange', label='Reconstructed k=1')
+    axes[0, 1].set_title(f'Class 1 - k=1 (RMSE={rmse1_k1:.4f})')
+    axes[0, 1].set_xlabel('Feature 1')
+    axes[0, 1].set_ylabel('Feature 2')
+    axes[0, 1].grid(True)
+    axes[0, 1].legend()
+
+    axes[0, 2].scatter(recon1_k2[:, 0], recon1_k2[:, 1], alpha=0.6, color='green', label='Reconstructed k=2')
+    axes[0, 2].set_title(f'Class 1 - k=2 (RMSE={rmse1_k2:.4f})')
+    axes[0, 2].set_xlabel('Feature 1')
+    axes[0, 2].set_ylabel('Feature 2')
+    axes[0, 2].grid(True)
+    axes[0, 2].legend()
+
+    # Class 2
+    axes[1, 0].scatter(samples2[:, 0], samples2[:, 1], alpha=0.6, color='red', label='Original')
+    axes[1, 0].set_title('Class 2 - Original Data')
+    axes[1, 0].set_xlabel('Feature 1')
+    axes[1, 0].set_ylabel('Feature 2')
+    axes[1, 0].grid(True)
+    axes[1, 0].legend()
+
+    axes[1, 1].scatter(recon2_k1[:, 0], recon2_k1[:, 1], alpha=0.6, color='orange', label='Reconstructed k=1')
+    axes[1, 1].set_title(f'Class 2 - k=1 (RMSE={rmse2_k1:.4f})')
+    axes[1, 1].set_xlabel('Feature 1')
+    axes[1, 1].set_ylabel('Feature 2')
+    axes[1, 1].grid(True)
+    axes[1, 1].legend()
+
+    axes[1, 2].scatter(recon2_k2[:, 0], recon2_k2[:, 1], alpha=0.6, color='green', label='Reconstructed k=2')
+    axes[1, 2].set_title(f'Class 2 - k=2 (RMSE={rmse2_k2:.4f})')
+    axes[1, 2].set_xlabel('Feature 1')
+    axes[1, 2].set_ylabel('Feature 2')
+    axes[1, 2].grid(True)
+    axes[1, 2].legend()
+
+    plt.tight_layout()
+    plt.savefig('Plots/reconstruction_comparison.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
 
     print("Class 1 Mean:\n", calculated_mean1)
     print("Class 1 Covariance Matrix:\n", cov_matrix1)
@@ -189,6 +289,7 @@ def main():
         plt.ylabel('Feature 2')
         plt.legend()
         plt.grid(True)
+        plt.savefig('Plots/eigenvectors_scatter_plot.png', dpi=300, bbox_inches='tight')
         plt.show()
     else:
         print("Complete the TODOs to see the visualization.")
