@@ -1,11 +1,13 @@
+import os
 import numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
-from configs import STUDENT_ID # This is set globaly from the config file
+from configs import STUDENT_ID # This is set globally from the config file
 from tests.test_eigen_vals_vects import cov_test, mean_test, test_eigenvalues, test_eigenvectors
+import pandas as pd
 
-# I've Created a simple Test for this exersice, you can use ;)
+# I've Created a simple Test for this exercise, you can use ;)
 def main():
+    os.makedirs('Plots', exist_ok=True)
     # Get student number for seeding randomness
     #student_number = int(input("Enter your student number: "))
     student_number = STUDENT_ID
@@ -252,6 +254,25 @@ def main():
     plt.savefig('Plots/reconstruction_comparison.png', dpi=300, bbox_inches='tight')
     plt.show()
     
+    df_class1 = pd.DataFrame({
+    'Class': ['Class 1'] * len(eigenvalues1),
+    'Component': [f'PC {i+1}' for i in range(len(eigenvalues1))],
+    'Eigenvalue': eigenvalues1,
+    'Explained_Variance_Ratio': evr1,
+    'Cumulative_EVR': np.cumsum(evr1)
+})
+
+    df_class2 = pd.DataFrame({
+        'Class': ['Class 2'] * len(eigenvalues2),
+        'Component': [f'PC {i+1}' for i in range(len(eigenvalues2))],
+        'Eigenvalue': eigenvalues2,
+        'Explained_Variance_Ratio': evr2,
+        'Cumulative_EVR': np.cumsum(evr2)
+    })
+    df_combined = pd.concat([df_class1, df_class2], ignore_index=True)
+    csv_path = 'Plots/eigenvalues_results.csv'
+    df_combined.to_csv(csv_path, index=False)
+    print(f"✓ Eigenvalues results exported to: {csv_path}")
 
     print("Class 1 Mean:\n", calculated_mean1)
     print("Class 1 Covariance Matrix:\n", cov_matrix1)
