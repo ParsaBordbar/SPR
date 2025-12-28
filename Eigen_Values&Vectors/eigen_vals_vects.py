@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from configs import STUDENT_ID # This is set globally from the config file
+from report.configs import STUDENT_ID # This is set globally from the config file
 from tests.test_eigen_vals_vects import cov_test, mean_test, test_eigenvalues, test_eigenvectors
 import pandas as pd
 

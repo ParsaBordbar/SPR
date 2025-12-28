@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
-from configs import STUDENT_ID
+from report.configs import STUDENT_ID
 
 
 def main():
