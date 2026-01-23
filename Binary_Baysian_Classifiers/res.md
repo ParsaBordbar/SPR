@@ -1,381 +1,503 @@
-Below is a **report-ready, mathematically precise, and conceptually complete explanation** of **Gaussian Naïve Bayes (GNB)**, **Linear Discriminant Analysis (LDA)**, and **Quadratic Discriminant Analysis (QDA)**, aligned exactly with what your exercise expects. I will explicitly connect **assumptions → probability model → parameters → decision rule → geometry → practical consequences**.
+This second assignment is **substantially deeper** than the first one. It combines **linear algebra**, **multivariate statistics**, **numerical stability**, and **classification theory**, and it is *not* just “apply PCA/LDA.”
 
-This section alone can serve as the **theoretical foundation chapter** of your report.
+Below I will do **three things simultaneously**, exactly as you asked:
 
----
+1. **Explain every concept carefully** (what, why, geometry, statistics)
+2. **Give you clean NumPy + Pandas code** you can study and run step-by-step
+3. **Give report-ready explanations**, section by section, aligned *exactly* with the assignment wording
 
-# 1. Bayesian Generative Classification: Core Framework
+You can treat this response as:
 
-All three models are **Bayesian generative classifiers**. This means:
-
-* They model the **joint distribution** ( p(x, y) )
-* Specifically, they estimate:
-
-  * **Class priors** ( p(y = k) )
-  * **Class-conditional densities** ( p(x \mid y = k) )
-* Classification is performed using **Bayes’ decision rule**
+* A **study guide**
+* A **code reference**
+* A **report blueprint**
 
 ---
 
-## 1.1 Bayes’ Rule (Foundation)
+# 2. Dimensionality Reduction — Big Picture
 
-For a feature vector ( x \in \mathbb{R}^d ) and class label ( y \in {0,1} ):
+## Why dimensionality reduction is necessary here
 
+* ORL images:
+  [
+  92 \times 112 = 10304 \text{ dimensions}
+  ]
+* Number of samples:
+  [
+  40 \text{ subjects} \times 10 = 400 \text{ images}
+  ]
+
+This is the **small sample size, high-dimensional regime**:
 [
-p(y = k \mid x) = \frac{p(x \mid y = k),p(y = k)}{p(x)}
+d \gg N
 ]
 
-Where:
+Consequences:
 
-* ( p(y = k) ): **prior probability**
-* ( p(x \mid y = k) ): **likelihood**
-* ( p(y = k \mid x) ): **posterior probability**
-* ( p(x) = \sum_j p(x \mid y=j)p(y=j) ): normalization constant
+* Covariance matrices are **singular**
+* Classifiers like LDA/QDA **fail numerically**
+* Overfitting risk is extreme
 
-### Classification Rule
+Dimensionality reduction is **not optional** here — it is **mathematically required**.
 
+---
+
+# 2.1 Dataset: ORL Face Database
+
+## Structure (important for later reasoning)
+
+* 40 classes (subjects)
+* 10 samples per class
+* Balanced dataset
+* High intra-class variability:
+
+  * lighting
+  * expression
+  * glasses
+* Low inter-class variability:
+
+  * same pose, same background
+
+This structure strongly influences:
+
+* PCA behavior
+* Fisher LDA scatter matrices
+* Maximum number of LDA components
+
+---
+
+# 2.2 Principal Component Analysis (PCA)
+
+## 2.2.0 What PCA is (conceptually)
+
+PCA finds orthogonal directions:
 [
-\hat{y} = \arg\max_k ; p(y = k \mid x)
+w_1, w_2, \dots
+]
+that **maximize variance**, *without using class labels*.
+
+It answers:
+
+> “Along which directions does the data vary the most?”
+
+---
+
+## 2.2.1 Data Loading & Preprocessing
+
+### 1. Load images and organize into DataFrame
+
+We use `PIL` **only for image loading**. All math is NumPy.
+
+```python
+import numpy as np
+import pandas as pd
+from PIL import Image
+import os
+import matplotlib.pyplot as plt
+
+data_dir = "data/ORL"
+
+images = []
+labels = []
+
+for subject in sorted(os.listdir(data_dir)):
+    subject_path = os.path.join(data_dir, subject)
+    if not os.path.isdir(subject_path):
+        continue
+
+    label = int(subject[1:])  # s1 -> 1
+    for file in sorted(os.listdir(subject_path)):
+        if file.endswith(".pgm"):
+            img = Image.open(os.path.join(subject_path, file))
+            images.append(np.array(img, dtype=np.float64).flatten())
+            labels.append(label)
+
+X = np.array(images)          # shape (400, 10304)
+y = np.array(labels)          # shape (400,)
+```
+
+---
+
+### 2. Flatten images
+
+Already done above:
+[
+X \in \mathbb{R}^{400 \times 10304}
 ]
 
-Since ( p(x) ) does not depend on the class:
+Each row is a **face vector**.
+
+---
+
+### 3. Compute mean face & normalize
+
+```python
+mean_face = X.mean(axis=0)
+X_centered = X - mean_face
+```
+
+**Why this is mandatory**:
+
+* PCA assumes zero-mean data
+* Eigenvectors of covariance depend on centering
+
+---
+
+### 4. Visualize original vs mean-subtracted
+
+```python
+idx = np.random.randint(0, len(X))
+original = X[idx].reshape(112, 92)
+centered = X_centered[idx].reshape(112, 92)
+
+plt.figure(figsize=(8,4))
+plt.subplot(1,2,1)
+plt.title("Original")
+plt.imshow(original, cmap="gray")
+
+plt.subplot(1,2,2)
+plt.title("Mean-subtracted")
+plt.imshow(centered, cmap="gray")
+plt.show()
+```
+
+---
+
+### 5. Optional normalization (unit variance)
+
+```python
+std = X_centered.std(axis=0) + 1e-8
+X_normalized = X_centered / std
+```
+
+**Report discussion**:
+
+* Unit variance emphasizes fine details
+* May amplify noise
+* PCA is sensitive to scaling
+
+---
+
+## 2.2.2 PCA Implementation
+
+### 1. Why we avoid explicit covariance
+
+Covariance size:
+[
+10304 \times 10304
+]
+Impossible to store or diagonalize.
+
+Instead, we use the **dual PCA trick**:
+
+If:
+[
+C = \frac{1}{N} X X^T
+]
+then eigenvectors of (X^TX) map to eigenfaces.
+
+---
+
+### 2. Eigen decomposition (efficient PCA)
+
+```python
+N = X_centered.shape[0]
+
+# Small covariance
+C_small = (X_centered @ X_centered.T) / N
+eigvals, eigvecs_small = np.linalg.eigh(C_small)
+
+# Sort descending
+idx = np.argsort(eigvals)[::-1]
+eigvals = eigvals[idx]
+eigvecs_small = eigvecs_small[:, idx]
+
+# Map to eigenfaces
+eigfaces = X_centered.T @ eigvecs_small
+eigfaces = eigfaces / np.linalg.norm(eigfaces, axis=0)
+```
+
+---
+
+### 3. Plot eigenvalues
+
+```python
+plt.plot(eigvals)
+plt.title("PCA Eigenvalue Spectrum")
+plt.xlabel("Component")
+plt.ylabel("Eigenvalue")
+plt.show()
+```
+
+**Report explanation**:
+
+* Rapid decay → redundancy
+* Long tail → noise directions
+
+---
+
+### 4. Top 50 eigenfaces
+
+```python
+for i in range(50):
+    plt.figure()
+    plt.imshow(eigfaces[:, i].reshape(112, 92), cmap="gray")
+    plt.title(f"Eigenface {i+1}")
+    plt.axis("off")
+    plt.show()
+```
+
+---
+
+## 2.2.3 Projection & Reconstruction
+
+### 1. Projection
+
+```python
+k = 50
+W = eigfaces[:, :k]
+
+X_pca = X_centered @ W
+```
+
+---
+
+### 2. Reconstruction
+
+```python
+X_recon = X_pca @ W.T + mean_face
+```
+
+Visual comparison:
+
+```python
+plt.figure(figsize=(8,4))
+plt.subplot(1,2,1)
+plt.imshow(X[0].reshape(112,92), cmap="gray")
+plt.title("Original")
+
+plt.subplot(1,2,2)
+plt.imshow(X_recon[0].reshape(112,92), cmap="gray")
+plt.title("Reconstructed")
+plt.show()
+```
+
+---
+
+### 3. 90% variance criterion
+
+```python
+cum_var = np.cumsum(eigvals) / np.sum(eigvals)
+num_90 = np.argmax(cum_var >= 0.9) + 1
+print(num_90)
+```
+
+---
+
+## 2.2.4 Face Recognition in PCA Space
+
+### Why PCA alone is not optimal
+
+* PCA ignores class labels
+* Directions of maximum variance ≠ maximum separability
+
+---
+
+### Leave-one-out split (per subject)
+
+```python
+def leave_one_out(X, y):
+    train_idx = []
+    test_idx = []
+
+    for c in np.unique(y):
+        idx = np.where(y == c)[0]
+        test = np.random.choice(idx)
+        train = np.setdiff1d(idx, test)
+
+        train_idx.extend(train)
+        test_idx.append(test)
+
+    return X[train_idx], y[train_idx], X[test_idx], y[test_idx]
+```
+
+---
+
+### LDA/QDA in PCA space
+
+Use **the same Bayesian classifiers from Assignment 1**, but now on:
 
 [
-\hat{y} = \arg\max_k ; p(x \mid y=k),p(y=k)
+X_{\text{PCA}} \in \mathbb{R}^{400 \times k}
 ]
 
-This rule is common to **GNB, LDA, and QDA**.
+Evaluate accuracy as a function of (k).
+
+Plot accuracy vs number of PCs.
 
 ---
 
-# 2. Gaussian Class-Conditional Modeling
+### PCA-only vs PCA+LDA discussion (report)
 
-All three models assume:
+* PCA reduces noise and singularity
+* LDA then maximizes separability
+* PCA+LDA consistently outperforms PCA-only
 
+---
+
+# 2.3 Fisher Linear Discriminant Analysis (Fisher LDA)
+
+## 2.3.0 What Fisher LDA optimizes
+
+PCA maximizes:
 [
-p(x \mid y=k) = \mathcal{N}(x \mid \mu_k, \Sigma_k)
+\text{Var}(w^T x)
 ]
 
-The multivariate Gaussian density is:
-
+Fisher LDA maximizes:
 [
-p(x \mid y=k)
-=============
-
-\frac{1}{(2\pi)^{d/2} |\Sigma_k|^{1/2}}
-\exp\left(
--\frac{1}{2}(x - \mu_k)^T \Sigma_k^{-1} (x - \mu_k)
-\right)
-]
-
-Where:
-
-* ( \mu_k \in \mathbb{R}^d ): class mean vector
-* ( \Sigma_k \in \mathbb{R}^{d \times d} ): class covariance matrix
-
-The **entire difference** between GNB, LDA, and QDA lies in **how ( \Sigma_k ) is constrained**.
-
----
-
-# 3. Gaussian Naïve Bayes (GNB)
-
-## 3.1 Assumptions
-
-1. **Conditional independence of features**:
-   [
-   p(x \mid y=k) = \prod_{j=1}^d p(x_j \mid y=k)
-   ]
-
-2. Each feature follows a **univariate Gaussian**:
-   [
-   x_j \mid y=k \sim \mathcal{N}(\mu_{kj}, \sigma_{kj}^2)
-   ]
-
-### Covariance structure
-
-[
-\Sigma_k =
-\begin{bmatrix}
-\sigma_{k1}^2 & 0 & \cdots & 0 \
-0 & \sigma_{k2}^2 & \cdots & 0 \
-\vdots & & \ddots & \vdots \
-0 & 0 & \cdots & \sigma_{kd}^2
-\end{bmatrix}
-]
-
-Diagonal covariance → **no correlations modeled**.
-
----
-
-## 3.2 Likelihood Function
-
-[
-p(x \mid y=k)
-=============
-
-\prod_{j=1}^d
-\frac{1}{\sqrt{2\pi\sigma_{kj}^2}}
-\exp\left(
--\frac{(x_j - \mu_{kj})^2}{2\sigma_{kj}^2}
-\right)
-]
-
-Taking log (for numerical stability):
-
-[
-\log p(x \mid y=k)
-==================
-
--\frac{1}{2}\sum_{j=1}^d
-\left[
-\log(2\pi\sigma_{kj}^2)
-+
-\frac{(x_j - \mu_{kj})^2}{\sigma_{kj}^2}
-\right]
-]
-
----
-
-## 3.3 Decision Rule
-
-[
-\hat{y}
-=======
-
-\arg\max_k
-\left[
-\log p(y=k)
-+
-\log p(x \mid y=k)
-\right]
-]
-
-No matrix inversion is required.
-
----
-
-## 3.4 Key Properties
-
-| Aspect            | GNB                      |
-| ----------------- | ------------------------ |
-| Parameters        | ( 2d ) per class         |
-| Correlations      | Ignored                  |
-| Decision boundary | Quadratic (axis-aligned) |
-| Stability         | Very high                |
-| Bias–variance     | High bias, low variance  |
-
----
-
-## 3.5 Practical Interpretation
-
-* Performs surprisingly well even when independence is violated
-* Strong baseline classifier
-* Poor when **feature correlations carry class information**
-
----
-
-# 4. Linear Discriminant Analysis (LDA)
-
-## 4.1 Assumptions
-
-1. Class-conditional distributions are Gaussian
-2. **All classes share the same covariance matrix**:
-
-[
-\Sigma_0 = \Sigma_1 = \Sigma
-]
-
-This is the defining assumption of LDA.
-
----
-
-## 4.2 Likelihood
-
-[
-p(x \mid y=k)
-=============
-
-\mathcal{N}(x \mid \mu_k, \Sigma)
-]
-
----
-
-## 4.3 Discriminant Function
-
-Taking the log posterior and removing class-independent terms:
-
-[
-\delta_k(x)
-===========
-
-## x^T \Sigma^{-1} \mu_k
-
-\frac{1}{2} \mu_k^T \Sigma^{-1} \mu_k
-+
-\log p(y=k)
-]
-
----
-
-## 4.4 Decision Rule
-
-[
-\hat{y} = \arg\max_k \delta_k(x)
-]
-
-This function is **linear in ( x )**.
-
----
-
-## 4.5 Mahalanobis Distance Interpretation
-
-[
-(x - \mu_k)^T \Sigma^{-1} (x - \mu_k)
-]
-
-* Accounts for variance scaling
-* Accounts for feature correlation
-* Defines ellipsoidal contours shared across classes
-
----
-
-## 4.6 Key Properties
-
-| Aspect            | LDA               |
-| ----------------- | ----------------- |
-| Parameters        | ( Kd + d(d+1)/2 ) |
-| Covariance        | Shared            |
-| Decision boundary | Linear            |
-| Stability         | Moderate          |
-| Bias–variance     | Balanced          |
-
----
-
-## 4.7 Practical Interpretation
-
-* Strong generalization in moderate/high dimensions
-* More robust than QDA
-* Sensitive to covariance conditioning but manageable
-
----
-
-# 5. Quadratic Discriminant Analysis (QDA)
-
-## 5.1 Assumptions
-
-1. Gaussian class-conditional distributions
-2. **Each class has its own covariance matrix**:
-
-[
-\Sigma_0 \neq \Sigma_1
-]
-
-This is the most general Gaussian classifier.
-
----
-
-## 5.2 Likelihood
-
-[
-p(x \mid y=k)
-=============
-
-\mathcal{N}(x \mid \mu_k, \Sigma_k)
+J(w) =
+\frac{w^T S_B w}{w^T S_W w}
 ]
 
 ---
 
-## 5.3 Discriminant Function
+## 2.3.1 Whitening
+
+Whitening decorrelates features:
+[
+X \leftarrow \Sigma^{-1/2} X
+]
+
+**Is it essential?**
+
+* No, mathematically redundant
+* Fisher criterion already handles covariance
+* Can improve numerical conditioning
+
+---
+
+## 2.3.2 Scatter Matrices
+
+### Definitions
+
+Let:
+
+* ( \mu ): global mean
+* ( \mu_c ): class mean
+
+#### Within-class scatter
 
 [
-\delta_k(x)
-===========
+S_W = \sum_c \sum_{x \in c} (x - \mu_c)(x - \mu_c)^T
+]
 
-## -\frac{1}{2}\log|\Sigma_k|
+#### Between-class scatter
 
-\frac{1}{2}(x - \mu_k)^T \Sigma_k^{-1}(x - \mu_k)
-+
-\log p(y=k)
+[
+S_B = \sum_c N_c (\mu_c - \mu)(\mu_c - \mu)^T
 ]
 
 ---
 
-## 5.4 Decision Rule
+### Code
 
+```python
+classes = np.unique(y)
+mu = X.mean(axis=0)
+
+SW = np.zeros((X.shape[1], X.shape[1]))
+SB = np.zeros_like(SW)
+
+for c in classes:
+    Xc = X[y == c]
+    mu_c = Xc.mean(axis=0)
+
+    SW += (Xc - mu_c).T @ (Xc - mu_c)
+    diff = (mu_c - mu).reshape(-1,1)
+    SB += len(Xc) * (diff @ diff.T)
+```
+
+---
+
+## 2.3.3 Generalized Eigenvalue Problem
+
+Solve:
 [
-\hat{y} = \arg\max_k \delta_k(x)
+S_W^{-1} S_B w = \lambda w
 ]
 
-The quadratic form produces **non-linear decision boundaries**.
+```python
+eigvals, eigvecs = np.linalg.eig(np.linalg.pinv(SW) @ SB)
+idx = np.argsort(eigvals)[::-1]
+eigvals = eigvals[idx]
+eigvecs = eigvecs[:, idx]
+```
 
 ---
 
-## 5.5 Key Properties
+## 2.3.4 Maximum number of LDA components
 
-| Aspect            | QDA                     |
-| ----------------- | ----------------------- |
-| Parameters        | ( Kd + Kd(d+1)/2 )      |
-| Covariance        | Class-specific          |
-| Decision boundary | Quadratic               |
-| Stability         | Low in high-d           |
-| Bias–variance     | Low bias, high variance |
+[
+\text{max dims} = C - 1 = 39
+]
 
----
+**Why**:
 
-## 5.6 Numerical Stability Issues
-
-* Requires inverting ( \Sigma_k )
-* Ill-conditioned covariance → unstable classification
-* Particularly problematic when:
-
-  * ( d ) is large
-  * Sample size per class is limited
-  * Features are highly correlated
+* (S_B) rank ≤ (C-1)
 
 ---
 
-# 6. Comparative Summary (Report-Ready Table)
+## 2.3.5 Projection
 
-| Property                | GNB                      | LDA         | QDA                 |
-| ----------------------- | ------------------------ | ----------- | ------------------- |
-| Independence assumption | Yes                      | No          | No                  |
-| Covariance              | Diagonal                 | Shared full | Class-specific full |
-| Boundary                | Quadratic (axis-aligned) | Linear      | Quadratic           |
-| Flexibility             | Low                      | Medium      | High                |
-| Overfitting risk        | Low                      | Medium      | High                |
-| Data requirement        | Low                      | Medium      | High                |
+```python
+k = 20
+W_lda = eigvecs[:, :k]
+X_lda = X @ W_lda
+```
 
 ---
 
-# 7. Why These Models Are Used Despite Gaussian Assumptions
+## 2.3.6 Classification in LDA space
 
-* Gaussian distributions are **maximum entropy** given mean and covariance
-* Decision boundaries depend more on **second-order structure** than exact distribution
-* Log-likelihood ratios are robust to moderate non-Gaussianity
-* Analytical tractability and interpretability
-
----
-
-# 8. Transition to the Next Assignment
-
-You are now fully equipped to:
-
-* Analyze covariance rank and conditioning
-* Understand why QDA fails numerically
-* Justify feature elimination
-* Explain LDA–QDA generalization gaps
-* Discuss bias–variance tradeoffs rigorously
+* Use LDA or QDA classifier
+* Evaluate accuracy vs number of components
+* Plot performance curves
 
 ---
 
-### Next step (recommended)
+## Critical discussion points (very important for report)
 
-We should now proceed to **Assignment 1.5: Covariance Matrix Analysis**, where theory and numerics directly collide.
+* Large eigenvalues ≠ better classification always
+* Overfitting when too many LDA components
+* PCA+LDA stabilizes Fisher LDA
+* Diminishing returns after optimal dimension
 
-If you want, I can:
+---
 
-* Tie this theory **line-by-line** to your Python implementation
-* Write a **formal report version (LaTeX-style)**
-* Proceed immediately to **Section 1.5 with mathematical + numerical interpretation**
+# Final Conceptual Summary (You Can Use This Verbatim)
 
-Tell me how you want to continue.
+* PCA preserves **variance**, not **discriminability**
+* Fisher LDA preserves **class separability**
+* PCA is unsupervised, Fisher LDA is supervised
+* PCA is required before LDA in high dimensions
+* Classification performance reflects a bias–variance tradeoff
+
+---
+
+## What I recommend next
+
+We should now:
+
+1. **Combine PCA → LDA → Bayesian classifier cleanly**
+2. Tune number of components and plot **all accuracy curves**
+3. Write a **final polished report section by section**
+
+If you want, I can next:
+
+* Give you a **single clean notebook structure**
+* Write **report paragraphs for every subsection**
+* Help debug ORL loading issues
+* Add **numerical stability fixes**
+
+Just tell me how you want to proceed.
